@@ -845,6 +845,12 @@ const styles = StyleSheet.create({
     height: 390,
     borderRadius: 15,
     overflow: 'hidden',
+    // Enhanced 3D depth effects (Master Duel style)
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.6,
+    shadowRadius: 12,
+    elevation: 12,
   },
   cardContainerSmall: {
     width: 140, // Half size
@@ -856,6 +862,12 @@ const styles = StyleSheet.create({
     height: 195, // Half height
     borderRadius: 8,
     overflow: 'hidden',
+    // Enhanced 3D depth effects (Master Duel style)
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.5,
+    shadowRadius: 10,
+    elevation: 10,
   },
   // Small card text styles
   creatureNameSmall: {
@@ -906,6 +918,12 @@ const styles = StyleSheet.create({
   standardCard: {
     backgroundColor: Colors.background.card,
     borderWidth: 3,
+    // Additional depth for standard cards
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.4,
+    shadowRadius: 8,
+    elevation: 6,
   },
   premiumCard: {
     position: 'relative',
@@ -1134,14 +1152,23 @@ const styles = StyleSheet.create({
   },
   // Selection styles for standard cards (applied to inner card, not container)
   selectedCard: {
-    borderWidth: 4, // Slightly thicker for better visibility
-    boxShadow: `0px 0px 6px 0px ${hexToRgba(Colors.accent[400], 0.4)}`,
-    elevation: 4,
+    borderWidth: 5, // Thicker for better visibility
+    boxShadow: `0px 0px 20px 4px ${hexToRgba(Colors.accent[400], 0.8)}`,
+    elevation: 16,
+    // Dramatic glow effect (Master Duel style)
+    shadowColor: Colors.accent[400],
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.9,
+    shadowRadius: 20,
   },
   selectedCardSmall: {
-    borderWidth: 3,
-    boxShadow: `0px 0px 3px 0px ${hexToRgba(Colors.accent[400], 0.4)}`,
-    elevation: 2,
+    borderWidth: 4,
+    boxShadow: `0px 0px 12px 2px ${hexToRgba(Colors.accent[400], 0.8)}`,
+    elevation: 12,
+    shadowColor: Colors.accent[400],
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.8,
+    shadowRadius: 12,
   },
   disabled: {
     opacity: 0.6,

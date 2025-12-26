@@ -502,6 +502,13 @@ export function GameBoard() {
 
   return (
     <View style={styles.mainContainer}>
+      {/* Master Duel style background */}
+      <LinearGradient
+        colors={['#0a0e27', '#16213e', '#1a1a2e', '#0f3460']}
+        style={styles.battlefieldBackground}
+        start={{ x: 0, y: 0 }}
+        end={{ x: 1, y: 1 }}
+      />
       <ScrollView style={styles.gameContainer}>
       {/* Top Player Info */}
       <PlayerInfo
@@ -708,11 +715,18 @@ const styles = StyleSheet.create({
   mainContainer: {
     flex: 1,
     flexDirection: 'row',
-    backgroundColor: Colors.background.primary,
+    backgroundColor: '#0a0e27',
+  },
+  battlefieldBackground: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
   },
   gameContainer: {
     flex: 1,
-    backgroundColor: Colors.background.primary,
+    backgroundColor: 'transparent',
   },
   container: {
     flex: 1,
