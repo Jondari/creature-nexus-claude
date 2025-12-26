@@ -1,0 +1,701 @@
+import React, { useState, useEffect, useCallback, useRef } from 'react';
+import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
+import { showErrorAlert, showWarningAlert } from '@/utils/alerts';
+import { useGame } from '../context/GameContext';
+import { useGameActions } from '../hooks/useGameActions';
+import { useDecks } from '../context/DeckContext';
+import { useSettings } from '../context/SettingsContext';
+import { BattlefieldGrid } from './board/BattlefieldGrid';
+import { VisualPlayerInfo } from './board/VisualPlayerInfo';
+import { CompactStatusBar } from './board/CompactStatusBar';
+import { CompactHand } from './board/CompactHand';
+import { ActionLog } from './ActionLog';
+import { Sidebar } from './Sidebar';
+import { EnergyWaveAnimation } from './Animation/EnergyWaveAnimation';
+import { SpellCastAnimation } from './Animation/SpellCastAnimation';
+import { RulesContent } from './RulesContent';
+import { Card } from '../types/game';
+import { t } from '../utils/i18n';
+import { CardLoader } from '../utils/game/cardLoader';
+import { isSpellCard } from '../models/cards-extended';
+import Colors from '../constants/Colors';
+import { useAnchorRegister } from '@/context/AnchorsContext';
+import { COMMON_ANCHORS } from '@/types/scenes';
+import { useSceneEvents } from '@/context/SceneManagerContext';
+import { useSceneManager } from '@/context/SceneManagerContext';
+
+/**
+ * GameBoardGrid - Master Duel style grid-based battlefield UI
+ * Compact, zoomed-out view with all zones visible at once
+ */
+export function GameBoardGrid() {
+  const {
+    gameState,
+    gameEngine,
+    actionLog,
+    damageAnimations,
+    aiVisualState,
+    energyWaveAnimation,
+    spellCastAnimation,
+    isLoading,
+    error,
+    triggerDamageAnimation,
+    clearDamageAnimation,
+    clearEnergyWaveAnimation,
+    triggerSpellCastAnimation,
+    clearSpellCastAnimation,
+    resetGame,
+    initializeGame
+  } = useGame();
+  const { activeDeck } = useDecks();
+  const { showBattleLog } = useSettings();
+  const sceneManager = useSceneManager();
+  const { playCard, castSpell, attack, retireCard, endTurn, processAITurn } = useGameActions();
+  const [selectedCard, setSelectedCard] = useState<string | null>(null);
+  const [attackMode, setAttackMode] = useState<{ cardId: string; attackName: string } | null>(null);
+  const [rulesVisible, setRulesVisible] = useState(false);
+  const [showDeckSelection, setShowDeckSelection] = useState(false);
+  const [sidebarVisible, setSidebarVisible] = useState(false);
+  const [resolvingAttack, setResolvingAttack] = useState(false);
+  const publishEvent = useSceneEvents();
+  const wasAITurnRef = useRef<boolean | null>(null);
+
+  // Anchor refs for tutorial highlights
+  const topFieldRef = useRef<View | null>(null);
+  const bottomFieldRef = useRef<View | null>(null);
+  const bottomHandRef = useRef<View | null>(null);
+  const bottomStatsRef = useRef<View | null>(null);
+  const topStatsRef = useRef<View | null>(null);
+  const endTurnBtnRef = useRef<TouchableOpacity | null>(null);
+  const turnStatusRef = useRef<View | null>(null);
+
+  // Register anchors
+  useAnchorRegister(COMMON_ANCHORS.ENEMY_FIELD, topFieldRef);
+  useAnchorRegister(COMMON_ANCHORS.FIELD_AREA, bottomFieldRef);
+  useAnchorRegister(COMMON_ANCHORS.HAND_AREA, bottomHandRef);
+  useAnchorRegister(COMMON_ANCHORS.ENERGY_DISPLAY, bottomStatsRef);
+  useAnchorRegister(COMMON_ANCHORS.PLAYER_HP, bottomStatsRef);
+  useAnchorRegister(COMMON_ANCHORS.ENEMY_HP, topStatsRef);
+  useAnchorRegister(COMMON_ANCHORS.END_TURN_BUTTON, endTurnBtnRef as any);
+  useAnchorRegister(COMMON_ANCHORS.TURN_STATUS, turnStatusRef);
+
+  useEffect(() => {
+    if (!gameState || !gameEngine) return;
+
+    const currentPlayer = gameEngine.getCurrentPlayer();
+    const isAITurn = currentPlayer.isAI;
+    const previous = wasAITurnRef.current;
+
+    if (previous === null) {
+      wasAITurnRef.current = isAITurn;
+      return;
+    }
+
+    if (!previous && isAITurn) {
+      sceneManager.setFlag('ai_turn_completed', false);
+    } else if (previous && !isAITurn) {
+      sceneManager.setFlag('ai_turn_completed', true);
+    }
+
+    wasAITurnRef.current = isAITurn;
+  }, [gameState?.currentPlayerIndex, gameState?.phase, gameState?.turnNumber, gameEngine, sceneManager]);
+
+  const toggleSidebar = () => setSidebarVisible(!sidebarVisible);
+  const closeSidebar = () => setSidebarVisible(false);
+
+  // Element cycle for affinity
+  const ELEMENT_CYCLE: Record<string, string> = {
+    water: 'fire',
+    fire: 'air',
+    air: 'earth',
+    earth: 'water',
+  };
+
+  // Clear attack preview when selecting different card
+  useEffect(() => {
+    setAttackMode(null);
+  }, [selectedCard]);
+
+  function getAffinityBonus(attackerElement?: string, defenderElement?: string): number {
+    if (!attackerElement || !defenderElement) return 0;
+    if (defenderElement === 'all') return 0;
+    if (ELEMENT_CYCLE[attackerElement] === defenderElement) return 20;
+    if (ELEMENT_CYCLE[defenderElement] === attackerElement) return -20;
+    return 0;
+  }
+
+  function getPreviewDamage(attacker: Card, attackName: string, target: Card) {
+    const atk = attacker.attacks.find((a: any) => a.name === attackName);
+    if (!atk) return null;
+    const base = Number(atk.damage ?? 0) || 0;
+    const affinity = getAffinityBonus(attacker.element as any, target.element as any);
+    const total = Math.max(0, base + affinity);
+    return { base, affinity, total };
+  }
+
+  // Show deck selection if no game is active
+  useEffect(() => {
+    if (!gameState && !isLoading && !showDeckSelection) {
+      setShowDeckSelection(true);
+    }
+  }, [gameState, isLoading, showDeckSelection]);
+
+  const startGameWithDeck = (playerDeck: Card[]) => {
+    const allCards = CardLoader.loadCards();
+    const aiDeck = allCards.slice(20, 40);
+
+    initializeGame(t('player.you'), playerDeck, aiDeck);
+    setShowDeckSelection(false);
+  };
+
+  const startWithActiveDeck = () => {
+    if (activeDeck && activeDeck.cards.length >= 20) {
+      startGameWithDeck(activeDeck.cards);
+    } else {
+      showErrorAlert(
+        t('decks.invalidDeckTitle'),
+        activeDeck
+          ? t('decks.invalidDeckMin', { min: '20' })
+          : t('decks.noActiveDeck')
+      );
+    }
+  };
+
+  const startWithDemoDeck = () => {
+    const allCards = CardLoader.loadCards();
+    const playerDeck = allCards.slice(0, 20);
+    startGameWithDeck(playerDeck);
+  };
+
+  // Auto-process AI turns
+  useEffect(() => {
+    if (!gameState || !gameEngine || gameState.isGameOver || aiVisualState.isActive) return;
+
+    const currentPlayer = gameEngine.getCurrentPlayer();
+
+    if (currentPlayer.isAI && gameState.phase === 'main') {
+      const timeoutId = setTimeout(() => {
+        processAITurn();
+      }, 1500);
+
+      return () => clearTimeout(timeoutId);
+    }
+  }, [gameState?.currentPlayerIndex, gameState?.phase, gameState?.turnNumber, processAITurn, gameEngine, gameState, aiVisualState.isActive]);
+
+  // Auto-clear damage animations
+  useEffect(() => {
+    const timeoutIds = damageAnimations
+        .filter(anim => anim.isActive && anim.duration > 0)
+        .map(anim => setTimeout(() => {
+          clearDamageAnimation(anim.cardId);
+        }, anim.duration));
+
+    return () => {
+      timeoutIds.forEach(clearTimeout);
+    };
+  }, [damageAnimations, clearDamageAnimation]);
+
+  if (isLoading) {
+    return (
+      <View style={styles.centered}>
+        <Text style={styles.loadingText}>{t('game.loading')}</Text>
+      </View>
+    );
+  }
+
+  if (error) {
+    return (
+      <View style={styles.centered}>
+        <Text style={styles.error}>{error}</Text>
+      </View>
+    );
+  }
+
+  if (showDeckSelection) {
+    return (
+      <View style={styles.centered}>
+        <Text style={styles.deckSelectionTitle}>{t('decks.selection.title')}</Text>
+        <Text style={styles.deckSelectionSubtitle}>
+          {t('decks.selection.subtitle')}
+        </Text>
+
+        <View style={styles.deckOptions}>
+          {activeDeck && (
+            <TouchableOpacity
+              style={[styles.deckOption, styles.activeDeckOption]}
+              onPress={startWithActiveDeck}
+            >
+              <Text style={styles.deckOptionTitle}>{t('decks.selection.useActive')}</Text>
+              <Text style={styles.deckOptionName}>"{activeDeck.name}"</Text>
+              <Text style={styles.deckOptionStats}>
+                {t('decks.selection.cardCount', { count: String(activeDeck.cards.length) })}
+              </Text>
+              {activeDeck.cards.length < 20 && (
+                <Text style={styles.deckOptionWarning}>
+                  ⚠️ {t('decks.selection.needMin', { min: '20' })}
+                </Text>
+              )}
+            </TouchableOpacity>
+          )}
+
+          <TouchableOpacity
+            style={[styles.deckOption, styles.demoDeckOption]}
+            onPress={startWithDemoDeck}
+          >
+            <Text style={styles.deckOptionTitle}>{t('decks.selection.useDemo')}</Text>
+            <Text style={styles.deckOptionName}>{t('decks.selection.demoName')}</Text>
+            <Text style={styles.deckOptionStats}>{t('decks.selection.demoStats')}</Text>
+            <Text style={styles.deckOptionDescription}>
+              {t('decks.selection.demoDesc')}
+            </Text>
+          </TouchableOpacity>
+        </View>
+
+        {!activeDeck && (
+          <Text style={styles.noDeckMessage}>
+            💡 {t('decks.selection.noDeckMessage')}
+          </Text>
+        )}
+      </View>
+    );
+  }
+
+  if (!gameState || !gameEngine) {
+    return (
+      <View style={styles.centered}>
+        <Text style={styles.loadingText}>{t('game.error')}</Text>
+      </View>
+    );
+  }
+
+  const currentPlayer = gameEngine.getCurrentPlayer();
+  const isPlayerTurn = !currentPlayer.isAI;
+
+  const handleCardPress = (card: Card) => {
+    if (!isPlayerTurn || resolvingAttack) return;
+
+    if (attackMode) {
+      const attacker = playerAtBottom.field.find(c => c.id === attackMode.cardId);
+      const preview = attacker ? getPreviewDamage(attacker, attackMode.attackName, card) : null;
+      const isPredictedLethal = !!(preview && card.hp != null && preview.total >= card.hp);
+
+      const KILL_ANIM_MS = 600;
+      const NON_KILL_ANIM_MS = 1000;
+      const animMs = isPredictedLethal ? KILL_ANIM_MS : NON_KILL_ANIM_MS;
+
+      if (card.id) {
+        triggerDamageAnimation(card.id, animMs);
+      }
+
+      setAttackMode(null);
+      setSelectedCard(null);
+
+      if (isPredictedLethal) {
+        setResolvingAttack(true);
+        setTimeout(() => {
+          attack(attacker!.id!, attackMode.attackName, card.id!);
+          publishEvent({ type: 'attack_used' });
+          setResolvingAttack(false);
+        }, KILL_ANIM_MS);
+      } else {
+        attack(attacker!.id!, attackMode.attackName, card.id!);
+        publishEvent({ type: 'attack_used' });
+      }
+    } else {
+      setSelectedCard(card.id === selectedCard ? null : card.id!);
+    }
+  };
+
+  const handlePlayCard = (cardId: string) => {
+    const currentPlayer = gameEngine.getCurrentPlayer();
+    const card = currentPlayer.hand.find(c => c.id === cardId);
+
+    if (!card) {
+      showErrorAlert(t('game.cardNotFoundTitle'), t('game.cardNotFoundBody'));
+      return;
+    }
+
+    if (isSpellCard(card)) {
+      if (currentPlayer.energy < card.energyCost) {
+        showWarningAlert(
+          t('combat.notEnoughEnergy'),
+          t('combat.insufficientEnergySpell', { required: String(card.energyCost), current: String(currentPlayer.energy) })
+        );
+        return;
+      }
+
+      castSpell(cardId);
+      publishEvent({ type: 'card_played' });
+    } else {
+      if (currentPlayer.field.length >= 4) {
+        showWarningAlert(t('combat.fieldFullTitle'), t('combat.fieldFullBody'));
+        return;
+      }
+
+      playCard(cardId);
+      publishEvent({ type: 'card_played' });
+    }
+
+    setSelectedCard(null);
+  };
+
+  const handleAttack = (cardId: string, attackName: string) => {
+    const currentPlayer = gameEngine.getCurrentPlayer();
+    const attackerCard = currentPlayer.field.find(c => c.id === cardId);
+    const attack = attackerCard?.attacks.find(a => a.name === attackName);
+
+    if (!attack || currentPlayer.energy < attack.energy) {
+      showWarningAlert(
+        t('combat.notEnoughEnergy'),
+        t('combat.insufficientEnergyAttack', { required: String(attack?.energy || 0), current: String(currentPlayer.energy) })
+      );
+      return;
+    }
+
+    const opponent = gameEngine.getOpponent();
+    if (opponent.field.length === 0) {
+      showWarningAlert(t('combat.noTargetsTitle'), t('combat.noTargetsBody'));
+      return;
+    }
+
+    setAttackMode({ cardId, attackName });
+    showWarningAlert(t('actions.selectTarget'), t('actions.selectTargetHint'));
+  };
+
+  const handleEndTurn = () => {
+    endTurn();
+    setSelectedCard(null);
+    setAttackMode(null);
+    publishEvent({ type: 'turn_ended' });
+  };
+
+  const getDamageAnimationForCard = (cardId: string) => {
+    return damageAnimations.find(anim => anim.cardId === cardId);
+  };
+
+  const getCardHighlightType = (cardId: string) => {
+    if (!aiVisualState.isActive) return null;
+    if (aiVisualState.highlightedCardId === cardId) return 'selected';
+    if (aiVisualState.targetCardId === cardId) return 'target';
+    return null;
+  };
+
+  const getAIStatusMessage = (status: string) => {
+    const key = `game.aiStatus.${status}`;
+    const translated = t(key);
+    if (translated !== key) {
+      return translated;
+    }
+    return t('game.aiStatus.default');
+  };
+
+  const playerAtBottom = gameEngine.getPlayers()[0];
+  const playerAtTop = gameEngine.getPlayers()[1];
+
+  const aiStatusText = aiVisualState.isActive
+    ? `🤖 ${aiVisualState.message || getAIStatusMessage(aiVisualState.status)}`
+    : null;
+
+  if (gameState.isGameOver) {
+    const handlePlayAgain = () => {
+      const humanPlayer = playerAtBottom;
+      const aiPlayer = playerAtTop;
+
+      resetGame();
+
+      setTimeout(() => {
+        initializeGame(humanPlayer.name, humanPlayer.deck, aiPlayer.deck);
+      }, 100);
+    };
+
+    const handleReturnToMenu = () => {
+      resetGame();
+      setShowDeckSelection(true);
+    };
+
+    return (
+      <View style={styles.centered}>
+        <Text style={styles.gameOver}>
+          {gameState.winner === playerAtBottom.id ? t('game_over.victory') : t('game_over.defeat')}
+        </Text>
+        <Text style={styles.winner}>{t('game_over.winner')}: {gameState.winner}</Text>
+
+        <View style={styles.gameOverButtons}>
+          <TouchableOpacity style={styles.gameOverButton} onPress={handlePlayAgain}>
+            <Text style={styles.gameOverButtonText}>{t('game.playAgain')}</Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            style={[styles.gameOverButton, styles.gameOverButtonSecondary]}
+            onPress={handleReturnToMenu}
+          >
+            <Text style={[styles.gameOverButtonText, styles.gameOverButtonTextSecondary]}>
+              {t('game.returnToMenu')}
+            </Text>
+          </TouchableOpacity>
+        </View>
+      </View>
+    );
+  }
+
+  return (
+    <View style={styles.mainContainer}>
+      <View style={styles.gameContainer}>
+        {/* Top Player Info */}
+        <VisualPlayerInfo
+          name={playerAtTop.name}
+          energy={playerAtTop.energy}
+          points={playerAtTop.points}
+          handSize={playerAtTop.hand.length}
+          position="top"
+          containerRef={topStatsRef as any}
+        />
+
+        {/* Top Player Field (Grid) */}
+        <BattlefieldGrid
+          fieldCards={playerAtTop.field}
+          maxFieldSize={4}
+          position="top"
+          deckSize={playerAtTop.deck.length}
+          graveyardSize={0} // TODO: Add graveyard tracking
+          selectedCardId={selectedCard}
+          disabled={!isPlayerTurn || !attackMode || resolvingAttack}
+          attackMode={attackMode}
+          previewDamage={(card) => {
+            if (!isPlayerTurn || !attackMode) return null;
+            const attacker = playerAtBottom.field.find((c) => c.id === attackMode.cardId);
+            return attacker ? getPreviewDamage(attacker, attackMode.attackName, card) : null;
+          }}
+          aiHighlight={getCardHighlightType}
+          damageAnimation={getDamageAnimationForCard}
+          onCardPress={handleCardPress}
+        />
+
+        {/* Game Status */}
+        <CompactStatusBar
+          turnNumber={gameState.turnNumber}
+          phase={gameState.phase}
+          isPlayerTurn={isPlayerTurn}
+          aiStatus={aiStatusText}
+          showEndTurnButton={currentPlayer.id === playerAtBottom.id && isPlayerTurn}
+          onEndTurn={handleEndTurn}
+          onShowRules={() => setRulesVisible(true)}
+          showBattleLog={showBattleLog}
+          onToggleBattleLog={toggleSidebar}
+          containerRef={turnStatusRef as any}
+          endTurnButtonRef={endTurnBtnRef as any}
+        />
+
+        {/* Bottom Player Field (Grid) */}
+        <BattlefieldGrid
+          fieldCards={playerAtBottom.field}
+          maxFieldSize={4}
+          position="bottom"
+          deckSize={playerAtBottom.deck.length}
+          graveyardSize={0} // TODO: Add graveyard tracking
+          selectedCardId={selectedCard}
+          disabled={!isPlayerTurn || resolvingAttack}
+          aiHighlight={getCardHighlightType}
+          damageAnimation={getDamageAnimationForCard}
+          onCardPress={(card) => {
+            const willSelect = card.id !== selectedCard;
+            setSelectedCard(willSelect ? card.id : null);
+            if (willSelect) publishEvent({ type: 'creature_selected' });
+            setAttackMode(null);
+          }}
+        />
+
+        {/* Bottom Player Info */}
+        <VisualPlayerInfo
+          name={playerAtBottom.name}
+          energy={playerAtBottom.energy}
+          points={playerAtBottom.points}
+          handSize={playerAtBottom.hand.length}
+          position="bottom"
+          containerRef={bottomStatsRef as any}
+        />
+
+        {/* Bottom Player Hand */}
+        <CompactHand
+          cards={playerAtBottom.hand}
+          selectedCardId={selectedCard}
+          onCardPress={(card) => setSelectedCard(card.id === selectedCard ? null : card.id!)}
+          showActions={(card) =>
+            selectedCard === card.id &&
+            currentPlayer.id === playerAtBottom.id &&
+            isPlayerTurn
+          }
+          onPlayCard={handlePlayCard}
+          disabled={currentPlayer.id !== playerAtBottom.id || !isPlayerTurn}
+          containerRef={bottomHandRef as any}
+        />
+      </View>
+
+      {/* Battle log sidebar */}
+      {showBattleLog && (
+        <Sidebar
+          visible={sidebarVisible}
+          onClose={closeSidebar}
+          title={t('battle.actionLog')}
+        >
+          <ActionLog logs={actionLog} sidebarMode={true} />
+        </Sidebar>
+      )}
+
+      {/* Rules sidebar */}
+      <Sidebar
+        visible={rulesVisible}
+        onClose={() => setRulesVisible(false)}
+        title={t('decks.rulesTitle')}
+      >
+        <RulesContent context="battle" />
+      </Sidebar>
+
+      {/* Animations */}
+      {energyWaveAnimation && energyWaveAnimation.show && (
+        <EnergyWaveAnimation
+          energyAmount={energyWaveAnimation.amount}
+          onComplete={clearEnergyWaveAnimation}
+        />
+      )}
+
+      {spellCastAnimation && spellCastAnimation.show && (
+        <SpellCastAnimation
+          spell={spellCastAnimation.spell}
+          startPosition={spellCastAnimation.startPosition}
+          onComplete={clearSpellCastAnimation}
+        />
+      )}
+    </View>
+  );
+}
+
+const styles = StyleSheet.create({
+  mainContainer: {
+    flex: 1,
+    flexDirection: 'row',
+    backgroundColor: Colors.background.primary,
+  },
+  gameContainer: {
+    flex: 1,
+    backgroundColor: Colors.background.primary,
+  },
+  centered: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: Colors.background.primary,
+  },
+  error: {
+    color: '#FF6B6B',
+    fontSize: 16,
+    textAlign: 'center',
+  },
+  gameOver: {
+    fontSize: 24,
+    fontWeight: 'bold',
+    textAlign: 'center',
+    marginBottom: 10,
+    color: Colors.text.primary,
+  },
+  winner: {
+    fontSize: 18,
+    textAlign: 'center',
+    color: Colors.text.secondary,
+  },
+  gameOverButtons: {
+    marginTop: 30,
+    gap: 15,
+  },
+  gameOverButton: {
+    backgroundColor: Colors.primary[600],
+    paddingHorizontal: 30,
+    paddingVertical: 15,
+    borderRadius: 8,
+    minWidth: 200,
+    alignItems: 'center',
+  },
+  gameOverButtonSecondary: {
+    backgroundColor: 'transparent',
+    borderWidth: 2,
+    borderColor: Colors.primary[600],
+  },
+  gameOverButtonText: {
+    color: Colors.text.primary,
+    fontSize: 16,
+    fontWeight: 'bold',
+  },
+  gameOverButtonTextSecondary: {
+    color: Colors.primary[600],
+  },
+  loadingText: {
+    color: Colors.text.primary,
+    fontSize: 16,
+  },
+  deckSelectionTitle: {
+    fontSize: 24,
+    fontWeight: 'bold',
+    color: Colors.text.primary,
+    marginBottom: 8,
+    textAlign: 'center',
+  },
+  deckSelectionSubtitle: {
+    fontSize: 16,
+    color: Colors.text.secondary,
+    marginBottom: 32,
+    textAlign: 'center',
+  },
+  deckOptions: {
+    width: '100%',
+    paddingHorizontal: 20,
+    gap: 16,
+  },
+  deckOption: {
+    backgroundColor: Colors.background.card,
+    padding: 20,
+    borderRadius: 12,
+    alignItems: 'center',
+    borderWidth: 2,
+    borderColor: 'transparent',
+  },
+  activeDeckOption: {
+    borderColor: Colors.primary[600],
+  },
+  demoDeckOption: {
+    borderColor: Colors.accent[600],
+  },
+  deckOptionTitle: {
+    fontSize: 18,
+    fontWeight: 'bold',
+    color: Colors.text.primary,
+    marginBottom: 8,
+  },
+  deckOptionName: {
+    fontSize: 16,
+    color: Colors.text.primary,
+    marginBottom: 4,
+  },
+  deckOptionStats: {
+    fontSize: 14,
+    color: Colors.text.secondary,
+    marginBottom: 4,
+  },
+  deckOptionDescription: {
+    fontSize: 12,
+    color: Colors.text.secondary,
+    textAlign: 'center',
+    fontStyle: 'italic',
+  },
+  deckOptionWarning: {
+    fontSize: 12,
+    color: '#FF6B6B',
+    marginTop: 4,
+  },
+  noDeckMessage: {
+    fontSize: 14,
+    color: Colors.text.secondary,
+    textAlign: 'center',
+    marginTop: 24,
+    fontStyle: 'italic',
+  },
+});

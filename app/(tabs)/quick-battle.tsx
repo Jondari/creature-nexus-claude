@@ -3,7 +3,7 @@ import { View, StyleSheet, TouchableOpacity } from 'react-native';
 import { useRouter } from 'expo-router';
 import { ArrowLeft } from 'lucide-react-native';
 import { GameProvider, useGame } from '@/context/GameContext';
-import { GameBoard } from '@/components/GameBoard';
+import { GameBoardGrid } from '@/components/GameBoardGrid';
 import Colors from '@/constants/Colors';
 import { useSceneTrigger } from '@/context/SceneManagerContext';
 import { COMMON_ANCHORS } from '@/types/scenes';
@@ -42,8 +42,8 @@ function QuickBattleContent() {
           <ArrowLeft size={24} color={Colors.text.primary} />
         </TouchableOpacity>
       )}
-      
-      <GameBoard />
+
+      <GameBoardGrid />
     </View>
   );
 }
