@@ -111,6 +111,12 @@ export default function TabLayout() {
           href: null,
         }}
       />
+      <Tabs.Screen
+        name="puzzle-quest"
+        options={{
+          href: null,
+        }}
+      />
     </Tabs>
   );
 }

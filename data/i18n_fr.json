@@ -574,7 +574,9 @@
       "storyTitle": "Mode Histoire",
       "storyDescription": "Partez pour une aventure épique au cœur du Nexus",
       "tutorialTitle": "Tutoriel de combat",
-      "tutorialDescription": "Suivez un affrontement guidé pour comprendre chaque mécanique"
+      "tutorialDescription": "Suivez un affrontement guidé pour comprendre chaque mécanique",
+      "puzzleQuestTitle": "Puzzle Quest",
+      "puzzleQuestDescription": "Combinez des gemmes pour combattre des monstres dans cette aventure puzzle"
     },
     "detail": {
       "unknownPlayer": "Joueur inconnu",
@@ -995,5 +997,19 @@
       "closing": "Voilà tout ce qu'il faut pour débuter !",
       "farewell": "Bonne chance, et que le Nexus vous guide !"
     }
+  },
+  "puzzleQuest": {
+    "title": "Puzzle Quest",
+    "loading": "Chargement...",
+    "yourTurn": "Votre tour",
+    "enemyTurn": "Tour de l'adversaire",
+    "victory": "Victoire !",
+    "defeat": "Défaite !",
+    "defeated": "{{winner}} a vaincu {{loser}} !",
+    "playAgain": "Rejouer",
+    "backToArena": "Retour à l'arène",
+    "matchGems": "Alignez 3 gemmes ou plus !",
+    "processing": "Traitement...",
+    "combo": "COMBO x{{count}} !"
   }
 }

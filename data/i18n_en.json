@@ -574,7 +574,9 @@
       "storyTitle": "Story Mode",
       "storyDescription": "Embark on an epic adventure through the Creature Nexus",
       "tutorialTitle": "Battle Tutorial",
-      "tutorialDescription": "Play a guided fight that teaches every core mechanic"
+      "tutorialDescription": "Play a guided fight that teaches every core mechanic",
+      "puzzleQuestTitle": "Puzzle Quest",
+      "puzzleQuestDescription": "Match gems to battle monsters in this puzzle adventure"
     },
     "detail": {
       "unknownPlayer": "Unknown Player",
@@ -995,5 +997,19 @@
       "closing": "That's all you need to start battling!",
       "farewell": "Good luck, and may the Nexus guide you!"
     }
+  },
+  "puzzleQuest": {
+    "title": "Puzzle Quest",
+    "loading": "Loading...",
+    "yourTurn": "Your Turn",
+    "enemyTurn": "Enemy's Turn",
+    "victory": "Victory!",
+    "defeat": "Defeat!",
+    "defeated": "{{winner}} defeated {{loser}}!",
+    "playAgain": "Play Again",
+    "backToArena": "Back to Arena",
+    "matchGems": "Match 3 or more gems!",
+    "processing": "Processing...",
+    "combo": "COMBO x{{count}}!"
   }
 }

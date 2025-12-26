@@ -2,7 +2,7 @@ import React from 'react';
 import { View, Text, TouchableOpacity, StyleSheet, ScrollView } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useRouter } from 'expo-router';
-import { Sword, BookOpen, GraduationCap } from 'lucide-react-native';
+import { Sword, BookOpen, GraduationCap, Sparkles } from 'lucide-react-native';
 import Colors from '@/constants/Colors';
 import { t } from '@/utils/i18n';
 
@@ -19,6 +19,10 @@ export default function BattleScreen() {
 
   const handleBattleTutorial = () => {
     router.push('/(tabs)/battle-tutorial');
+  };
+
+  const handlePuzzleQuest = () => {
+    router.push('/(tabs)/puzzle-quest');
   };
 
   return (
@@ -93,6 +97,25 @@ export default function BattleScreen() {
               <Text style={styles.optionTitle}>{t('battle.arena.storyTitle')}</Text>
               <Text style={styles.optionDescription}>
                 {t('battle.arena.storyDescription')}
+              </Text>
+            </LinearGradient>
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            style={styles.optionCard}
+            onPress={handlePuzzleQuest}
+            activeOpacity={0.8}
+          >
+            <LinearGradient
+              colors={['#9855d4', '#df8c2b']}
+              style={styles.optionGradient}
+              start={{ x: 0, y: 0 }}
+              end={{ x: 1, y: 1 }}
+            >
+              <Sparkles size={48} color={Colors.text.primary} />
+              <Text style={styles.optionTitle}>{t('battle.arena.puzzleQuestTitle')}</Text>
+              <Text style={styles.optionDescription}>
+                {t('battle.arena.puzzleQuestDescription')}
               </Text>
             </LinearGradient>
           </TouchableOpacity>
