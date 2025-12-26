@@ -9,6 +9,7 @@ import GlobalAlertProvider from '@/components/GlobalAlertProvider';
 import { StoryModeProvider } from '@/context/StoryModeContext';
 import { AnchorsProvider } from '@/context/AnchorsContext';
 import { SceneManagerProvider } from '@/context/SceneManagerContext';
+import { PvPProvider } from '@/context/PvPContext';
 import ScenesRegistry from '@/components/ScenesRegistry';
 import { useFonts } from 'expo-font';
 import { Inter_400Regular, Inter_500Medium, Inter_700Bold } from '@expo-google-fonts/inter';
@@ -131,9 +132,10 @@ export default function RootLayout() {
           {/* Inject scenes + anchors using the signed-in user id */}
           <SceneLayer>
             <DeckProvider>
-              <StoryModeProvider>
-                {/* Audio Permission Banner */}
-                <AudioPermissionBanner />
+              <PvPProvider>
+                <StoryModeProvider>
+                  {/* Audio Permission Banner */}
+                  <AudioPermissionBanner />
 
                 <Stack screenOptions={{
                   headerShown: false,
@@ -153,7 +155,8 @@ export default function RootLayout() {
                     onComplete={() => setShowAnimatedSplash(false)}
                   />
                 )}
-              </StoryModeProvider>
+                </StoryModeProvider>
+              </PvPProvider>
             </DeckProvider>
           </SceneLayer>
         </AuthProvider>
